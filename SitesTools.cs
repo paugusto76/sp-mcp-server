@@ -11,17 +11,17 @@ namespace SPOMcpServer.Tools;
 public static class SitesTools
 {
     [McpServerTool, Description("Find SharePoint sites accessible to the user. Returns specific sites matching a search query, or the top 20 relevant sites if no query is provided.")]
-    public static async Task<JsonDocument> FindSiteAsync(GraphService graphService, string searchQuery)
+    public static async Task<JsonDocument> FindSiteAsync(GraphService graphService, string searchQuery, string userBearerToken)
     {
         List<Site>? sites;
 
         if (string.IsNullOrWhiteSpace(searchQuery))
         {
-            sites = await graphService.GetTopSitesAsync();
+            sites = await graphService.GetTopSitesAsync(userBearerToken);
         }
         else
         {
-            sites = await graphService.SearchSiteAsync(searchQuery);
+            sites = await graphService.SearchSiteAsync(searchQuery, userBearerToken);
         }
 
         var options = new JsonSerializerOptions
@@ -34,14 +34,14 @@ public static class SitesTools
     }
 
     [McpServerTool, Description("Resolve a SharePoint site using its exact hostname and server-relative path. Use only when you have the complete site URL structure. Use FindSite when only a site name is known.")]
-    public static async Task<JsonDocument> GetSiteByPath(GraphService graphService, string hostname, string serverRelativePath)
+    public static async Task<JsonDocument> GetSiteByPath(GraphService graphService, string hostname, string serverRelativePath, string userBearerToken)
     {
         try
         {
             Debug.Assert(!string.IsNullOrWhiteSpace(hostname), "Hostname must be provided.");
             Debug.Assert(!string.IsNullOrWhiteSpace(serverRelativePath), "Server-relative path must be provided.");
 
-            var site = await graphService.GetSiteByPathAsync(hostname, serverRelativePath);
+            var site = await graphService.GetSiteByPathAsync(hostname, serverRelativePath, userBearerToken);
 
             var options = new JsonSerializerOptions
             {
@@ -58,13 +58,13 @@ public static class SitesTools
     }
 
     [McpServerTool, Description("List all subsites (child sites) of a SharePoint site.")]
-    public static async Task<JsonDocument> GetSubsites(GraphService graphService, string siteId)
+    public static async Task<JsonDocument> GetSubsites(GraphService graphService, string siteId, string userBearerToken)
     {
         try
         {
             Debug.Assert(!string.IsNullOrWhiteSpace(siteId), "Site ID must be provided.");
 
-            var subsites = await graphService.GetSubsitesAsync(siteId);
+            var subsites = await graphService.GetSubsitesAsync(siteId, userBearerToken);
 
             var options = new JsonSerializerOptions
             {

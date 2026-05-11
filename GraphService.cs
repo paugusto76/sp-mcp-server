@@ -10,22 +10,20 @@ public class GraphService
     private readonly GraphServiceClient _graphClient;
     private DateTime _graphClientLastSet;
 
-    private string _clientId = "";
-    private string _clientSecret = "";
-    private string _tenantId = "";
+
 
     public GraphService(ILogger<GraphService> logger)
     {
         _logger = logger;
 
-        _graphClient = InitGraph();
+        // _graphClient = InitGraph();
+        // _graphClient = InitGraphWithDelegated();
 
         _logger.LogError("GraphService initialized.");
     }
 
     internal GraphServiceClient InitGraph()
     {
-        string[] scopes = new string[] { "https://graph.microsoft.com/.default" };
 
         var options = new TokenCredentialOptions
         {
@@ -44,12 +42,48 @@ public class GraphService
         return graphClient;
     }
 
-    public async Task<List<Site>?> SearchSiteAsync(string searchQuery)
+    internal GraphServiceClient InitGraphWithDelegated()
+    {
+        var scopes = new[] { "Sites.Read.All", "Files.Read.All" };   // or specific scopes like "Sites.ReadWrite.All"
+
+        var credential = new InteractiveBrowserCredential(new InteractiveBrowserCredentialOptions
+        {
+            ClientId = _clientId,
+            TenantId = _tenantId,
+            // RedirectUri = "http://localhost",   // usually not needed
+        });
+
+        var graphClient = new GraphServiceClient(credential, scopes);
+        _graphClientLastSet = DateTime.Now;
+
+        return graphClient;
+    }
+
+    private GraphServiceClient UseGraphOnBehalfOfUser(string userBearerToken)
+    {
+
+        // Create a fresh credential for this request (or reuse with token provider)
+        var credential = new OnBehalfOfCredential(
+            tenantId: _tenantId,
+            clientId: _clientId,
+            clientSecret: _clientSecret,
+            userAssertion: userBearerToken   // ← The token from MCP client
+        );
+
+        // Option 1: Create client per-request (simplest)
+        var graphClient = new GraphServiceClient(credential, scopes);
+
+        return graphClient;
+    }
+
+
+    public async Task<List<Site>?> SearchSiteAsync(string searchQuery, string userBearerToken)
     {
         try
         {
             _logger.LogError("Searching for sites with query: {SearchQuery}", searchQuery);
-            var sites = await _graphClient.Sites.GetAsync(rc => rc.QueryParameters.Search = searchQuery);
+            var graphClient = UseGraphOnBehalfOfUser(userBearerToken);
+            var sites = await graphClient.Sites.GetAsync(rc => rc.QueryParameters.Search = searchQuery);
 
             return sites?.Value;
         }
@@ -60,12 +94,13 @@ public class GraphService
         }
     }
 
-    public async Task<List<Site>?> GetTopSitesAsync()
+    public async Task<List<Site>?> GetTopSitesAsync(string userBearerToken)
     {
         try
         {
             _logger.LogError("Retrieving top 20 sites.");
-            var sites = await _graphClient.Sites.GetAsync(rc => rc.QueryParameters.Top = 20);
+            var graphClient = UseGraphOnBehalfOfUser(userBearerToken);
+            var sites = await graphClient.Sites.GetAsync(rc => rc.QueryParameters.Top = 20);
 
             return sites?.Value;
         }
@@ -76,14 +111,15 @@ public class GraphService
         }
     }
 
-    internal async Task<Site?> GetSiteByPathAsync(string hostname, string serverRelativePath)
+    internal async Task<Site?> GetSiteByPathAsync(string hostname, string serverRelativePath, string userBearerToken)
     {
         try
         {
             _logger.LogError("Retrieving site with hostname: {Hostname} and path: {ServerRelativePath}", hostname, serverRelativePath);
             string sitePath = $"{hostname}:{(serverRelativePath.StartsWith("/") ? serverRelativePath : "/" + serverRelativePath)}";
 
-            var site = await _graphClient.Sites[sitePath].GetAsync();
+            var graphClient = UseGraphOnBehalfOfUser(userBearerToken);
+            var site = await graphClient.Sites[sitePath].GetAsync();
             return site;
         }
         catch (Exception ex)
@@ -93,12 +129,13 @@ public class GraphService
         }
     }
 
-    internal async Task<List<Site>?> GetSubsitesAsync(string siteId)
+    internal async Task<List<Site>?> GetSubsitesAsync(string siteId, string userBearerToken)
     {
         try
         {
             _logger.LogError("Retrieving subsites for site ID: {SiteId}", siteId);
-            var subsites = await _graphClient.Sites[siteId].Sites.GetAsync();
+            var graphClient = UseGraphOnBehalfOfUser(userBearerToken);
+            var subsites = await graphClient.Sites[siteId].Sites.GetAsync();
             return subsites?.Value;
         }
         catch (Exception ex)
